@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Araba Yarışı - Abdulkadir Üst</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #111;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            color: white;
+            user-select: none;
+        }
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 25px rgba(0,255,204,0.4);
+            border: 4px solid #333;
+            border-radius: 8px;
+        }
+        canvas {
+            background: #222;
+            display: block;
+        }
+        .creator-badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #00ffcc;
+            color: #00ffcc;
+            padding: 8px 15px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 4px;
+            letter-spacing: 1px;
+            box-shadow: 0 0 10px rgba(0,255,204,0.3);
+            pointer-events: none;
+            z-index: 10;
+        }
+        #ui-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            text-align: center;
+        }
+        h1 {
+            color: #ff0055;
+            text-shadow: 0 0 10px #ff0055;
+            margin-bottom: 10px;
+            font-size: 36px;
+        }
+        p {
+            color: #ccc;
+            font-size: 15px;
+            margin: 5px 0 20px 0;
+            line-height: 1.5;
+        }
+        .btn {
+            background: #00ffcc;
+            color: #111;
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            box-shadow: 0 0 10px #00ffcc;
+            transition: 0.2s;
+        }
+        .btn:hover {
+            background: #fff;
+            box-shadow: 0 0 15px #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div class="creator-badge">Yapımcı: Abdulkadir Üst</div>
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+        
+        <div id="ui-screen">
+            <h1>RETRO RACER</h1>
+            <p>
+                <b>Sol / Sağ Tuşları</b> veya <b>A / D</b> ile sür.<br>
+                <b>[C] Tuşu:</b> Arabanın Rengini Değiştir<br>
+                ⭐ Altınları topla (+50 Puan)!<br>
+                🚛 Kamyon ve engellerden kaç!
+            </p>
+            <button class="btn" onclick="startGame()">OYUNA BAŞLA</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiScreen = document.getElementById('ui-screen');
+
+        let gameRunning = false;
+        let score = 0;
+        let highScore = localStorage.getItem('racerHighScore') || 0;
+        let speed = 5;
+
+        const carColors = ['#00ffcc', '#ff0055', '#ffcc00', '#0099ff', '#a855f7'];
+        let currentColorIndex = 0;
+
+        let car = {
+            x: 180,
+            y: 480,
+            width: 40,
+            height: 70
+        };
+
+        let obstacles = [];
+        let coins = [];
+        let roadLineOffset = 0;
+
+        let keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            KeyA: false,
+            KeyD: false
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.code)) keys[e.code] = true;
+            
+            // C tuşu ile renk değiştirme
+            if (e.code === 'KeyC' && gameRunning) {
+                currentColorIndex = (currentColorIndex + 1) % carColors.length;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.code)) keys[e.code] = false;
+        });
+
+        function startGame() {
+            uiScreen.style.display = 'none';
+            car.x = 180;
+            obstacles = [];
+            coins = [];
+            score = 0;
+            speed = 5;
+            gameRunning = true;
+            loop();
+        }
+
+        function spawnEntities() {
+            // Engel Üretme (Araba veya Kamyon)
+            if (Math.random() < 0.03) {
+                let obsX = Math.random() * (canvas.width - 120) + 40;
+                let isTruck = Math.random() < 0.3; // %30 ihtimalle kamyon
+                
+                obstacles.push({
+                    x: obsX,
+                    y: -100,
+                    width: isTruck ? 45 : 40,
+                    height: isTruck ? 110 : 70,
+                    color: isTruck ? '#ff6600' : '#ff3333',
+                    type: isTruck ? 'truck' : 'car'
+                });
+            }
+
+            // Altın Üretme
+            if (Math.random() < 0.02) {
+                let coinX = Math.random() * (canvas.width - 120) + 45;
+                coins.push({
+                    x: coinX,
+                    y: -30,
+                    radius: 12
+                });
+            }
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            // Araba Hareketi
+            if (keys.ArrowLeft || keys.KeyA) car.x -= 6;
+            if (keys.ArrowRight || keys.KeyD) car.x += 6;
+
+            // Sınırlar
+            if (car.x < 40) car.x = 40;
+            if (car.x > canvas.width - 80) car.x = canvas.width - 80;
+
+            roadLineOffset += speed;
+            if (roadLineOffset > 40) roadLineOffset = 0;
+
+            spawnEntities();
+
+            // Engelleri Güncelle
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].y += speed;
+
+                // Çarpışma Kontrolü
+                if (
+                    car.x < obstacles[i].x + obstacles[i].width &&
+                    car.x + car.width > obstacles[i].x &&
+                    car.y < obstacles[i].y + obstacles[i].height &&
+                    car.y + car.height > obstacles[i].y
+                ) {
+                    gameOver();
+                }
+
+                if (obstacles[i].y > canvas.height) {
+                    obstacles.splice(i, 1);
+                    score += 10;
+                    speed += 0.03; // Gittikçe hızlan
+                }
+            }
+
+            // Altınları Güncelle
+            for (let i = coins.length - 1; i >= 0; i--) {
+                coins[i].y += speed;
+
+                // Altın Toplama Kontrolü
+                let dist = Math.hypot((car.x + car.width/2) - coins[i].x, (car.y + car.height/2) - coins[i].y);
+                if (dist < car.width/2 + coins[i].radius) {
+                    coins.splice(i, 1);
+                    score += 50; // Bonus puan
+                } else if (coins[i].y > canvas.height) {
+                    coins.splice(i, 1);
+                }
+            }
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            if (score > highScore) {
+                highScore = Math.floor(score);
+                localStorage.setItem('racerHighScore', highScore);
+            }
+
+            uiScreen.style.display = 'flex';
+            uiScreen.querySelector('h1').innerText = 'OYUN BİTTİ';
+            uiScreen.querySelector('p').innerHTML = `Skorun: <b>${Math.floor(score)}</b><br>En Yüksek Skor: <b>${highScore}</b>`;
+            uiScreen.querySelector('.btn').innerText = 'TEKRAR OYNA';
+        }
+
+        function draw() {
+            // Yol
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Çim Kenarlıklar
+            ctx.fillStyle = '#1e7b47';
+            ctx.fillRect(0, 0, 35, canvas.height);
+            ctx.fillRect(canvas.width - 35, 0, 35, canvas.height);
+
+            // Kesikli Çizgi
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 4;
+            ctx.setLineDash([20, 20]);
+            ctx.lineDashOffset = -roadLineOffset;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Oyuncu Arabası
+            ctx.fillStyle = carColors[currentColorIndex];
+            ctx.fillRect(car.x, car.y, car.width, car.height);
+            ctx.fillStyle = '#111';
+            ctx.fillRect(car.x + 5, car.y + 10, 30, 15);
+            ctx.fillRect(car.x + 5, car.y + 45, 30, 15);
+
+            // Engeller (Araba / Kamyon)
+            for (let obs of obstacles) {
+                ctx.fillStyle = obs.color;
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                ctx.fillStyle = '#111';
+                ctx.fillRect(obs.x + 5, obs.y + 10, obs.width - 10, 15);
+            }
+
+            // Altınlar
+            for (let coin of coins) {
+                ctx.fillStyle = '#ffd700';
+                ctx.beginPath();
+                ctx.arc(coin.x, coin.y, coin.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // Skor Ekranda Gösterimi
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 15px Courier New';
+            ctx.fillText(`SKOR: ${Math.floor(score)}`, 45, 30);
+            ctx.fillText(`REKOR: ${highScore}`, 45, 50);
+        }
+
+        function loop() {
+            if (!gameRunning) return;
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+    </script>
+</body>
+</html>
